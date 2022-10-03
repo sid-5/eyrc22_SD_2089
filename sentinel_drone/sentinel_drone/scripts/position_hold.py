@@ -38,9 +38,9 @@ class Edrone():
 		# self.Kp = [5.22,5.28,1.8]
 		# self.Ki = [0.68,0.384,0.2]
 		# self.Kd = [187.8,190.8,170.8]
-		self.Kp = [5.22,5.28,2.2]
-		self.Ki = [0.38,0.384,1.2]
-		self.Kd = [187.8,190.8,253.6]
+		self.Kp = [28.6,28.6,27.9]
+		self.Ki = [0,0,1.46]
+		self.Kd = [491.7,491.7,504]
 		self.prev_values = [0,0,0]
 		self.min_values = [1000,1000,1000]
 		self.max_values = [2000,2000,2000]
@@ -124,7 +124,7 @@ class Edrone():
 		error[2] = self.drone_position[2] - self.setpoint[2]
 
 		I_throttle = (self.prevI[2] + error[2]) * self.Ki[2]
-		if (error[2]<0 and I_throttle>0) or (error[2]>0 and I_throttle<0) or I_throttle<-20 or I_throttle>20 or error[2]<-1 or error[2]>1:
+		if (error[2]<0 and I_throttle>0) or (error[2]>0 and I_throttle<0) or I_throttle<-20 or I_throttle>20 or error[2]<-2 or error[2]>2:
 			I_throttle = 0;
 			
 		I_roll = (self.prevI[0] + error[0]) * self.Ki[0]
