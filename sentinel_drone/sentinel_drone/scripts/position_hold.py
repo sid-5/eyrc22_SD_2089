@@ -20,7 +20,7 @@ class Edrone():
 		self.drone_position = [0.0,0.0,0.0]	
 
 		# [x_setpoint, y_setpoint, z_setpoint]
-		self.setpoint = [2,2,20] 
+		self.setpoint = [2,2,20.0] 
 
 		#Declaring a cmd of message type edrone_msgs and initializing values
 		self.cmd = edrone_msgs()
@@ -28,23 +28,20 @@ class Edrone():
 		self.cmd.rcPitch = 1500
 		self.cmd.rcYaw = 1500
 		self.cmd.rcThrottle = 1500
-		self.cmd.rcAUX1 = 1500
-		self.cmd.rcAUX2 = 1500
-		self.cmd.rcAUX3 = 1500
-		self.cmd.rcAUX4 = 1500
+		self.cmd.rcAUX1 = 0
+		self.cmd.rcAUX2 = 0
+		self.cmd.rcAUX3 = 0
+		self.cmd.rcAUX4 = 0
 
 
 		#initial setting of Kp, Kd and ki for [roll, pitch, throttle]
-		# self.Kp = [5.22,5.28,1.8]
-		# self.Ki = [0.68,0.384,0.2]
-		# self.Kd = [187.8,190.8,170.8]
-		self.Kp = [28.6,28.6,27.9]
-		self.Ki = [0,0,1.46]
-		self.Kd = [491.7,491.7,504]
+		self.Kp = [40.6,40.6,49.5]
+		self.Ki = [0,0,0.0] #197
+		self.Kd = [1200,1200,450] #1223
 		self.prev_values = [0,0,0]
 		self.min_values = [1000,1000,1000]
 		self.max_values = [2000,2000,2000]
-		self.sample_freq = 15
+		self.sample_freq = 28                    #control loop frequency of 28hz
 		self.prevI = [0,0,0]                     #roll,pitch,throttle
 
 
@@ -93,7 +90,7 @@ class Edrone():
 
 	#---------------------------------------------------------------------------------------------------------------
 
-	# Callback functions
+	# Callback functions for PID Tuning package
 	def altitude_set_pid(self,alt):
 		pass
 		self.Kp[2] = alt.Kp * 0.06 
@@ -118,32 +115,40 @@ class Edrone():
 
 	def pid(self):
 
+		#calculating error
 		error = [0,0,0]
 		error[0] = self.drone_position[0] - self.setpoint[0]
 		error[1] = self.drone_position[1] - self.setpoint[1]
 		error[2] = self.drone_position[2] - self.setpoint[2]
 
+		#using clipping technique to control integral part of throttle as roll and pitch have no integral part
 		I_throttle = (self.prevI[2] + error[2]) * self.Ki[2]
-		if (error[2]<0 and I_throttle>0) or (error[2]>0 and I_throttle<0) or I_throttle<-20 or I_throttle>20 or error[2]<-2 or error[2]>2:
-			I_throttle = 0;
-			
+		if (error[2]>0 and I_throttle<0) or (error[2]<0 and I_throttle>0) or I_throttle<-50 or I_throttle>0 or error[2]<-1 or error[2]>1:
+			I_throttle = 0;	
 		I_roll = (self.prevI[0] + error[0]) * self.Ki[0]
 		I_pitch = (self.prevI[1] + error[1]) * self.Ki[1]
+
+		#PID formula
 		out_throttle = (self.Kp[2]*error[2]) + (self.Kd[2]*(error[2]-self.prev_values[2])) + I_throttle
 		out_roll = (self.Kp[0]*error[0]) + (self.Kd[0]*(error[0]-self.prev_values[0])) + I_roll
 		out_pitch = (self.Kp[1]*error[1]) + (self.Kd[1]*(error[1]-self.prev_values[1])) + I_pitch
-		print("const",self.Ki[2])
-		print("error",error[2])
-		print("II:", I_throttle)
-		print("prop:", self.Kp[2]*error[2])
-		print("diff:", (self.Kd[2]*(error[2]-self.prev_values[2])))
-		print("out_throttle",out_throttle)
+
+		#setting commands for drone from PID values
 		self.cmd.rcThrottle = 1500 + int(out_throttle)
 		self.cmd.rcRoll = 1500 - int(out_roll)
 		self.cmd.rcPitch = 1500 + int(out_pitch)
+
+		#updating previous error
 		self.prev_values = error 
-		self.prevI = [I_pitch, I_roll, I_throttle]
-		print("throttle",self.cmd.rcThrottle)
+
+		#udating previous error sum for integral part
+		self.prevI = [I_roll, I_pitch, I_throttle]
+		
+
+		#clipping output for drone requirements
+		print("integral",I_throttle)
+		print("error", error[2])
+		print("out",self.cmd.rcThrottle)
 		if self.cmd.rcThrottle > self.max_values[2]:
 			self.cmd.rcThrottle = self.max_values[2]
 		if self.cmd.rcPitch > self.max_values[1]:
@@ -156,10 +161,12 @@ class Edrone():
 			self.cmd.rcPitch = self.min_values[1]											
 		if self.cmd.rcRoll < self.min_values[0]:
 			self.cmd.rcRoll = self.min_values[0]
-	#------------------------------------------------------------------------------------------------------------------------
+	
 		
-		print("out_throttle",self.cmd.rcThrottle)
 		self.command_pub.publish(self.cmd)
+		self.pitch_err_publisher.publish(error[2])
+		self.roll_err_publisher.publish(error[0])
+		self.pitch_err_publisher.publish(error[1])
 
 
 
