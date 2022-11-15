@@ -22,6 +22,7 @@ class Edrone():
 		# [x_waypoint[self.iterator], y_waypoint[self.iterator], z_waypoint[self.iterator]]
 		self.waypoint = [[0,0,23],[2,0,23],[2,2,23],[-2,2,23],[-2,-2,23],[2,-2,23],[2,0,23],[0,0,23]] 
 		self.iterator = 0;
+		self.delay = 0;
 		#Declaring a cmd of message type edrone_msgs and initializing values
 		self.cmd = edrone_msgs()
 		self.cmd.rcRoll = 1500
@@ -120,9 +121,13 @@ class Edrone():
 		error[0] = self.drone_position[0] - self.waypoint[self.iterator][0]
 		error[1] = self.drone_position[1] - self.waypoint[self.iterator][1]
 		error[2] = self.drone_position[2] - self.waypoint[self.iterator][2]
-		if [-0.2,-0.2,-0.2]<=error<=[0.2,0.2,0.2]:
+		if [-0.1,-0.1,-0.1]<error<=[0.05,0.05,0.05]:
 			if self.iterator!=len(self.waypoint)-1:
-				self.iterator+=1
+				self.delay+=1
+				print(error)
+				if self.delay == 60:
+					self.iterator+=1
+					self.delay = 0
 				pass
 		#using clipping technique to control integral part of throttle as roll and pitch have no integral part
 		I_throttle = (self.prevI[2] + error[2]) * self.Ki[2]
@@ -149,7 +154,7 @@ class Edrone():
 		
 
 		#clipping output for drone requirements
-		rospy.loginfo(self.iterator)
+		print("Iter:",self.iterator)
 		if self.cmd.rcThrottle > self.max_values[2]:
 			self.cmd.rcThrottle = self.max_values[2]
 		if self.cmd.rcPitch > self.max_values[1]:
@@ -177,6 +182,7 @@ if __name__ == '__main__':
 	e_drone = Edrone()
 	print("started node")
 	r = rospy.Rate(e_drone.sample_freq) #specify rate in Hz based upon your desired PID sampling time, i.e. if desired sample time is 33ms specify rate as 30Hz
+	time.sleep(6)
 	while not rospy.is_shutdown():
 		e_drone.pid()
 		r.sleep()
