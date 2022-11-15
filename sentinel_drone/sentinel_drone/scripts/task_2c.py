@@ -10,9 +10,9 @@ from pid_tune.msg import PidTune
 import rospy
 import time
 from sensor_msgs.msg import Image
-from cv_bridge import CvBridge
+from cv_bridge import CvBridge as bridge
 import cv2 
-
+import numpy as np
 
 class Edrone():
 	def __init__(self):
@@ -23,7 +23,7 @@ class Edrone():
 		self.drone_position = [0.0,0.0,0.0]	
 
 		# [x_waypoint[self.iterator], y_waypoint[self.iterator], z_waypoint[self.iterator]]
-		self.waypoint = [0,0,0] 
+		self.waypoint = [-2,2,8] 
 		self.iterator = 0;
 		self.delay = 0;
 		#Declaring a cmd of message type edrone_msgs and initializing values
@@ -66,31 +66,36 @@ class Edrone():
 
 		self.arm() # ARMING THE DRONE
 
-	def get_image(self):
-		img = bridge.imgmsg_to_cv2(img_msg, "passthrough")
-		cv2.imshow("sd",img)
-		cv2.waitKey(0)
+	def get_image(self,img_msg):
+		br = bridge()
+		img = br.imgmsg_to_cv2(img_msg, "passthrough")
+		img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+		# cv2.imshow("sd",img)
+		# if cv2.waitKey(25) & 0xFF==ord('q'):
+		# 	print("lihli image")
+		# 	cv2.imwrite('/home/sid/test_sd.jpg', img)
 		##do CV Stuff and give me x,y,z co 
 		lower_yellow = np.array([0, 120, 120])
-	    upper_yellow = np.array([110, 255, 255])
+		upper_yellow = np.array([110, 255, 255])
 
-	    img = cv2.GaussianBlur(img, (3,3), 0)
-	    thresh = cv2.inRange(img, lower_yellow, upper_yellow)
+		img = cv2.GaussianBlur(img, (3,3), 0)
+		thresh = cv2.inRange(img, lower_yellow, upper_yellow)
 
-	    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5,5))
-	    opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=3)
+		kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5,5))
+		opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=3)
 
-	    contours, hierarchy = cv2.findContours(opening, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-	    # list(contours).sort(key=lambda x: -cv2.contourArea(x))
-	    if len(contours)==0:
-	        return (-1, -1)
-	    M = cv2.moments(contours[0])
+		contours, hierarchy = cv2.findContours(opening, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+		# list(contours).sort(key=lambda x: -cv2.contourArea(x))
+		if len(contours)==0:
+		    print(-1, -1)
+		else:
+			M = cv2.moments(contours[0])
 
-	    X = int(M['m10'] / M['m00'])
-	    Y = int(M['m01'] / M['m00'])
-	    height, width, n_channels = img.shape
-	    return (width/2-X, height/2-Y)
-		self.waypoint = [0,0,0]
+			X = int(M['m10'] / M['m00'])
+			Y = int(M['m01'] / M['m00'])
+			height, width, n_channels = img.shape
+			self.waypoint = [0,0,0]
+			print(width/2-X, height/2-Y)
 
 	# Disarming condition of the drone
 	def disarm(self):
@@ -176,7 +181,7 @@ class Edrone():
 		
 
 		#clipping output for drone requirements
-		print("Iter:",self.iterator)
+		# print("Iter:",self.iterator)
 		if self.cmd.rcThrottle > self.max_values[2]:
 			self.cmd.rcThrottle = self.max_values[2]
 		if self.cmd.rcPitch > self.max_values[1]:
