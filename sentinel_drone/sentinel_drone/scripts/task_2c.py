@@ -23,7 +23,7 @@ class Edrone():
 		self.drone_position = [0.0,0.0,0.0]	
 
 		# [x_waypoint[self.iterator], y_waypoint[self.iterator], z_waypoint[self.iterator]]
-		self.waypoint = [-4.5,4.5,21] 
+		self.waypoint = [-7,6,21] 
 		self.iterator = 0;
 		self.delay = 0;
 		#Declaring a cmd of message type edrone_msgs and initializing values
@@ -88,8 +88,8 @@ class Edrone():
 		# list(contours).sort(key=lambda x: -cv2.contourArea(x))
 		if len(contours)==0:
 			print(-1, -1)
-			if self.flag==1:
-				self.waypoint = [-4.5,4.5,21] 
+			#if self.flag==0:
+			#	self.waypoint = [-7,6,21] 
 		    
 		else:
 			M = cv2.moments(contours[0])
@@ -98,8 +98,8 @@ class Edrone():
 			Y = int(M['m01'] / M['m00'])
 			height, width, n_channels = img.shape
 			self.flag =0
-			self.waypoint = [self.waypoint[0]-(width/2-X)/300,self.waypoint[1]+(height/2-Y)/300,21]
-			print(width/2-X, height/2-Y)
+			self.waypoint = [self.waypoint[0]-((width/2-X)/2500),self.waypoint[1]-((height/2-Y)/3000),21]
+			print(self.waypoint[0]-((width/2-X)/2500),self.waypoint[1]-((height/2-Y)/3000))
 
 	# Disarming condition of the drone
 	def disarm(self):
@@ -167,9 +167,9 @@ class Edrone():
 		error[1] = self.drone_position[1] - self.waypoint[1]
 		error[2] = self.drone_position[2] - self.waypoint[2]
 		print("error is: ",error)
-		if [-0.5,-0.5,-0.5]<error<=[0.5,0.5,0.5] and self.flag==1:
+		if [-0.1,-0.1,-0.1]<error<=[0.1,0.1,0.1] and self.flag==1:
 			self.iterator+=1
-			self.waypoint[0], self.waypoint[1] = self.findWaypoint(0, 0,4.2, self.iterator)
+			self.waypoint[0], self.waypoint[1] = self.findWaypoint(0, 0,7, self.iterator)
 			pass
 		#using clipping technique to control integral part of throttle as roll and pitch have no integral part
 		I_throttle = (self.prevI[2] + error[2]) * self.Ki[2]
