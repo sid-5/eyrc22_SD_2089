@@ -23,7 +23,7 @@ class Edrone():
 		self.drone_position = [0.0,0.0,0.0]	
 
 		# [x_waypoint[self.iterator], y_waypoint[self.iterator], z_waypoint[self.iterator]]
-		self.waypoint = [-7,6,21] 
+		self.waypoint = [0,0,21] 
 		self.iterator = 0;
 		self.delay = 0;
 		#Declaring a cmd of message type edrone_msgs and initializing values
@@ -37,17 +37,18 @@ class Edrone():
 		self.cmd.rcAUX3 = 0
 		self.cmd.rcAUX4 = 0
 		self.flag =1
+		self.capture_flag = 0
 
 		#initial setting of Kp, Kd and ki for [roll, pitch, throttle]
-		self.Kp = [30.6,30.6,39.5]
+		self.Kp = [25.6,25.6,39.5]
 		self.Ki = [0,0,0.0] #197
-		self.Kd = [1200,1200,900] #1223
+		self.Kd = [1600,1600,900] #1223
 		self.prev_values = [0,0,0]
 		self.min_values = [1000,1000,1000]
 		self.max_values = [2000,2000,2000]
 		self.sample_freq = 28                    #control loop frequency of 28hz
 		self.prevI = [0,0,0]                     #roll,pitch,throttle
-
+		self.prev = [0,0]
 
 
 		# Publishing /drone_command, /alt_error, /pitch_error, /roll_error
@@ -70,14 +71,9 @@ class Edrone():
 		br = bridge()
 		img = br.imgmsg_to_cv2(img_msg, "passthrough")
 		img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-		# cv2.imshow("sd",img)
-		# if cv2.waitKey(25) & 0xFF==ord('q'):
-		# 	print("lihli image")
-		# 	cv2.imwrite('/home/sid/test_sd.jpg', img)
-		##do CV Stuff and give me x,y,z co 
 		lower_yellow = np.array([0, 150, 150])
 		upper_yellow = np.array([130, 255, 255])
-
+		image = img.copy()
 		img = cv2.GaussianBlur(img, (3,3), 0)
 		thresh = cv2.inRange(img, lower_yellow, upper_yellow)
 
@@ -86,20 +82,18 @@ class Edrone():
 
 		contours, hierarchy = cv2.findContours(opening, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
 		# list(contours).sort(key=lambda x: -cv2.contourArea(x))
-		if len(contours)==0:
-			print(-1, -1)
-			#if self.flag==0:
-			#	self.waypoint = [-7,6,21] 
-		    
-		else:
+		if len(contours)>0:
+			if self.capture_flag:
+				cv2.imwrite("/home/sid/Desktop/test"+str(self.iterator)+".jpg", image)
+				print("Img saved")
+				self.capture_flag=0
 			M = cv2.moments(contours[0])
-
 			X = int(M['m10'] / M['m00'])
 			Y = int(M['m01'] / M['m00'])
 			height, width, n_channels = img.shape
 			self.flag =0
 			self.waypoint = [self.waypoint[0]-((width/2-X)/2500),self.waypoint[1]-((height/2-Y)/3000),21]
-			print(self.waypoint[0]-((width/2-X)/2500),self.waypoint[1]-((height/2-Y)/3000))
+
 
 	# Disarming condition of the drone
 	def disarm(self):
@@ -150,13 +144,13 @@ class Edrone():
 		self.Kd[0] = roll.Kd * 0.3
 
 	#----------------------------------------------------------------------------------------------------------------------
-	def findWaypoint(self,x,y,step, counter):
+	def findWaypoint(self, step, counter):
 	    if counter % 2:
-        	y += step*(counter//2)*((-1)**(counter//2+1))
+        	self.waypoint[1] += step*(counter//2)*((-1)**(counter//2+1))
 	    else:
-	        x += step*(counter//2)*((-1)**(counter//2+1))
-	    print(x, y)
-	    return (x,y)
+	        self.waypoint[0] += step*(counter//2)*((-1)**(counter//2+1))
+	    self.prev = [self.waypoint[0], self.waypoint[1]]
+
 
 
 	def pid(self):
@@ -166,11 +160,18 @@ class Edrone():
 		error[0] = self.drone_position[0] - self.waypoint[0]
 		error[1] = self.drone_position[1] - self.waypoint[1]
 		error[2] = self.drone_position[2] - self.waypoint[2]
-		print("error is: ",error)
-		if [-0.1,-0.1,-0.1]<error<=[0.1,0.1,0.1] and self.flag==1:
-			self.iterator+=1
-			self.waypoint[0], self.waypoint[1] = self.findWaypoint(0, 0,7, self.iterator)
-			pass
+		
+		if (error[0]>-0.2 and error[0]<0.2) and (error[1]>-0.2 and error[1]<0.2) and (error[2]>-0.2 and error[2]<0.2):
+			print(self.iterator, self.waypoint, error, self.flag)
+			if  self.flag:
+				self.iterator+=1
+				self.findWaypoint(7, self.iterator)
+			else:
+				self.capture_flag = 1
+				self.waypoint[0:2] = self.prev
+				self.iterator+=1
+				self.findWaypoint(7, self.iterator)
+				self.flag = 1
 		#using clipping technique to control integral part of throttle as roll and pitch have no integral part
 		I_throttle = (self.prevI[2] + error[2]) * self.Ki[2]
 		if (error[2]>0 and I_throttle<0) or (error[2]<0 and I_throttle>0) or I_throttle<-50 or I_throttle>0 or error[2]<-1 or error[2]>1:
