@@ -24,8 +24,8 @@ class Edrone():
 
 		# [x_waypoint[self.iterator], y_waypoint[self.iterator], z_waypoint[self.iterator]]
 		self.waypoint = [0,0,21] 
-		self.iterator = 0;
-		self.delay = 0;
+		self.counter = 0
+		self.delay = 0
 		#Declaring a cmd of message type edrone_msgs and initializing values
 		self.cmd = edrone_msgs()
 		self.cmd.rcRoll = 1500
@@ -40,7 +40,7 @@ class Edrone():
 		self.capture_flag = 0
 
 		#initial setting of Kp, Kd and ki for [roll, pitch, throttle]
-		self.Kp = [10.6,10.6,39.5]
+		self.Kp = [26,26,39.5]
 		self.Ki = [0,0,0.0] #197
 		self.Kd = [700,700,900] #1223
 		self.prev_values = [0,0,0]
@@ -49,7 +49,8 @@ class Edrone():
 		self.sample_freq = 28                    #control loop frequency of 28hz
 		self.prevI = [0,0,0]                     #roll,pitch,throttle
 		self.prev = [0,0]
-
+		self.waypoint_queue = []
+		self.keypoints = [0,0]
 
 		# Publishing /drone_command, /alt_error, /pitch_error, /roll_error
 		self.command_pub = rospy.Publisher('/drone_command', edrone_msgs, queue_size=1)
@@ -84,7 +85,7 @@ class Edrone():
 		# list(contours).sort(key=lambda x: -cv2.contourArea(x))
 		if len(contours)>0:
 			if self.capture_flag:
-				cv2.imwrite("/home/sid/Desktop/test"+str(self.iterator)+".jpg", image)
+				cv2.imwrite("/home/atharva/Documents/test"+str(self.counter)+".jpg", image)
 				print("Img saved")
 				self.capture_flag=0
 			M = cv2.moments(contours[0])
@@ -144,14 +145,41 @@ class Edrone():
 		self.Kd[0] = roll.Kd * 0.3
 
 	#----------------------------------------------------------------------------------------------------------------------
-	def findWaypoint(self, step, counter):
-	    if counter % 2:
-        	self.waypoint[1] += step*(counter//2)*((-1)**(counter//2+1))
-	    else:
-	        self.waypoint[0] += step*(counter//2)*((-1)**(counter//2+1))
-	    self.prev = [self.waypoint[0], self.waypoint[1]]
-
-
+	def findWaypoint(self, step):
+		# TODO : Ball Detect nantar way point assign karna.
+		if len(self.waypoint_queue)==0:
+			self.counter += 1
+			if self.counter % 2:
+				# self.waypoint[1] += step*(self.counter//2)*((-1)**(self.counter//2+1))
+				waypoint_1 = self.keypoints[1] + step*(self.counter//2)*((-1)**(self.counter//2+1))
+				print(f'{self.keypoints} is old corner point')
+				print(f'{self.waypoint[0]},{waypoint_1} is new corner point')
+				print(f'{self.counter} is current counter point')
+				if waypoint_1>self.waypoint[1]:
+					for i in range(self.waypoint[1], waypoint_1, 7): #check step
+						self.waypoint_queue.append((self.waypoint[0], i))
+				else:
+					for i in range(self.waypoint[1], waypoint_1, -7):
+						self.waypoint_queue.append((self.waypoint[0], i))
+				self.waypoint_queue.append((self.waypoint[0], waypoint_1))
+				self.keypoints = [self.waypoint[0], waypoint_1]
+			else:
+				waypoint_0 = self.keypoints[0] + step*(self.counter//2)*((-1)**(self.counter//2+1))
+				print(f'{self.keypoints} is old corner point')
+				print(f'{waypoint_0},{self.waypoint[1]} is new corner point')
+				print(f'{self.counter} is current counter point')
+				if waypoint_0>self.waypoint[0]:
+					for i in range(self.waypoint[0], waypoint_0, 7):
+						self.waypoint_queue.append((i, self.waypoint[1]))
+				else:
+					for i in range(self.waypoint[0], waypoint_0, -7):
+						self.waypoint_queue.append((i, self.waypoint[1]))
+				self.waypoint_queue.append((waypoint_0, self.waypoint[1]))
+				self.keypoints = [waypoint_0, self.waypoint[1]]
+		self.prev = [self.waypoint[0], self.waypoint[1]]
+		print(self.waypoint_queue)
+		self.waypoint[0], self.waypoint[1] = self.waypoint_queue.pop(0)
+	    
 
 	def pid(self):
 		#calculating error
@@ -162,16 +190,14 @@ class Edrone():
 		error[2] = self.drone_position[2] - self.waypoint[2]
 		
 		if (error[0]>-0.2 and error[0]<0.2) and (error[1]>-0.2 and error[1]<0.2) and (error[2]>-0.2 and error[2]<0.2):
-			print(self.iterator, self.waypoint, error, self.flag)
+			print(self.counter, self.waypoint, self.flag)
 			if  self.flag:
-				self.iterator+=1
-				self.findWaypoint(7, self.iterator)
+				self.findWaypoint(7)
 				return
 			else:
 				self.capture_flag = 1
 				self.waypoint[0:2] = self.prev
-				self.iterator+=1
-				self.findWaypoint(7, self.iterator)
+				self.findWaypoint(7)
 				self.flag = 1
 				return
 		#using clipping technique to control integral part of throttle as roll and pitch have no integral part
