@@ -40,9 +40,9 @@ class Edrone():
 		self.capture_flag = 0
 
 		#initial setting of Kp, Kd and ki for [roll, pitch, throttle]
-		self.Kp = [25.6,25.6,39.5]
+		self.Kp = [10.6,10.6,39.5]
 		self.Ki = [0,0,0.0] #197
-		self.Kd = [1600,1600,900] #1223
+		self.Kd = [700,700,900] #1223
 		self.prev_values = [0,0,0]
 		self.min_values = [1000,1000,1000]
 		self.max_values = [2000,2000,2000]
@@ -92,7 +92,7 @@ class Edrone():
 			Y = int(M['m01'] / M['m00'])
 			height, width, n_channels = img.shape
 			self.flag =0
-			self.waypoint = [self.waypoint[0]-((width/2-X)/2500),self.waypoint[1]-((height/2-Y)/3000),21]
+			self.waypoint = [self.waypoint[0]-((width/2-X)/2600),self.waypoint[1]-((height/2-Y)/3100),21]
 
 
 	# Disarming condition of the drone
@@ -166,12 +166,14 @@ class Edrone():
 			if  self.flag:
 				self.iterator+=1
 				self.findWaypoint(7, self.iterator)
+				return
 			else:
 				self.capture_flag = 1
 				self.waypoint[0:2] = self.prev
 				self.iterator+=1
 				self.findWaypoint(7, self.iterator)
 				self.flag = 1
+				return
 		#using clipping technique to control integral part of throttle as roll and pitch have no integral part
 		I_throttle = (self.prevI[2] + error[2]) * self.Ki[2]
 		if (error[2]>0 and I_throttle<0) or (error[2]<0 and I_throttle>0) or I_throttle<-50 or I_throttle>0 or error[2]<-1 or error[2]>1:
