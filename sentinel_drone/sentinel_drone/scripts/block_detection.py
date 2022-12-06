@@ -38,6 +38,7 @@ class Edrone():
 		self.cmd.rcAUX4 = 0
 		self.flag =1
 		self.capture_flag = 0
+		self.waypoint_flag = 0
 
 		#initial setting of Kp, Kd and ki for [roll, pitch, throttle]
 		self.Kp = [26,26,39.5]
@@ -93,7 +94,13 @@ class Edrone():
 			Y = int(M['m01'] / M['m00'])
 			height, width, n_channels = img.shape
 			self.flag =0
-			self.waypoint = [self.waypoint[0]-((width/2-X)/2600),self.waypoint[1]-((height/2-Y)/3100),21]
+			self.waypoint_flag = 1
+			if self.waypoint_flag:
+				self.waypoint = [self.waypoint[0]-((width/2-X)/2600),self.waypoint[1]-((height/2-Y)/3100),21]
+				print(self.waypoint)
+				self.waypoint_flag = 0
+		else:
+			self.waypoint_flag = 1
 
 
 	# Disarming condition of the drone
@@ -153,29 +160,29 @@ class Edrone():
 				# self.waypoint[1] += step*(self.counter//2)*((-1)**(self.counter//2+1))
 				waypoint_1 = self.keypoints[1] + step*(self.counter//2)*((-1)**(self.counter//2+1))
 				print(f'{self.keypoints} is old corner point')
-				print(f'{self.waypoint[0]},{waypoint_1} is new corner point')
-				print(f'{self.counter} is current counter point')
+				print(f'{self.keypoints[0]},{waypoint_1} is new corner point')
+				print(f'{self.counter} is current counter')
 				if waypoint_1>self.waypoint[1]:
 					for i in range(self.waypoint[1], waypoint_1, 7): #check step
-						self.waypoint_queue.append((self.waypoint[0], i))
+						self.waypoint_queue.append((self.keypoints[0], i))
 				else:
 					for i in range(self.waypoint[1], waypoint_1, -7):
-						self.waypoint_queue.append((self.waypoint[0], i))
-				self.waypoint_queue.append((self.waypoint[0], waypoint_1))
-				self.keypoints = [self.waypoint[0], waypoint_1]
+						self.waypoint_queue.append((self.keypoints[0], i))
+				self.waypoint_queue.append((self.keypoints[0], waypoint_1))
+				self.keypoints[1] = waypoint_1
 			else:
 				waypoint_0 = self.keypoints[0] + step*(self.counter//2)*((-1)**(self.counter//2+1))
 				print(f'{self.keypoints} is old corner point')
-				print(f'{waypoint_0},{self.waypoint[1]} is new corner point')
-				print(f'{self.counter} is current counter point')
+				print(f'{waypoint_0},{self.keypoints[1]} is new corner point')
+				print(f'{self.counter} is current counter pnt')
 				if waypoint_0>self.waypoint[0]:
 					for i in range(self.waypoint[0], waypoint_0, 7):
-						self.waypoint_queue.append((i, self.waypoint[1]))
+						self.waypoint_queue.append((i, self.keypoints[1]))
 				else:
 					for i in range(self.waypoint[0], waypoint_0, -7):
-						self.waypoint_queue.append((i, self.waypoint[1]))
-				self.waypoint_queue.append((waypoint_0, self.waypoint[1]))
-				self.keypoints = [waypoint_0, self.waypoint[1]]
+						self.waypoint_queue.append((i, self.keypoints[1]))
+				self.waypoint_queue.append((waypoint_0, self.keypoints[1]))
+				self.keypoints[0] = waypoint_0
 		self.prev = [self.waypoint[0], self.waypoint[1]]
 		print(self.waypoint_queue)
 		self.waypoint[0], self.waypoint[1] = self.waypoint_queue.pop(0)
