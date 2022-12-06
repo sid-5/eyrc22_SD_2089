@@ -13,6 +13,7 @@ from sensor_msgs.msg import Image
 from cv_bridge import CvBridge as bridge
 import cv2 
 import numpy as np
+from sentinel_drone.msg import Geolocation
 
 class Edrone():
 	def __init__(self):
@@ -39,11 +40,11 @@ class Edrone():
 		self.flag =1
 		self.capture_flag = 0
 		self.waypoint_flag = 0
-
+		self.img_counter= 0
 		#initial setting of Kp, Kd and ki for [roll, pitch, throttle]
-		self.Kp = [26,26,39.5]
+		self.Kp = [26.6,26.6,39.5]
 		self.Ki = [0,0,0.0] #197
-		self.Kd = [700,700,900] #1223
+		self.Kd = [1200,1200,900] #1223
 		self.prev_values = [0,0,0]
 		self.min_values = [1000,1000,1000]
 		self.max_values = [2000,2000,2000]
@@ -58,6 +59,7 @@ class Edrone():
 		self.pitch_err_publisher = rospy.Publisher('/pitch_error', Float64, queue_size=1)
 		self.roll_err_publisher = rospy.Publisher('/roll_error', Float64, queue_size=1)
 		self.alt_err_publisher = rospy.Publisher('/alt_error', Float64, queue_size=1)
+		self.loation_pblisher = rospy.Publisher('/geolocation', Geolocation, queue_size=1)
 
 		#------------------------------------------------------------------------------------------------------------
 
@@ -86,7 +88,9 @@ class Edrone():
 		# list(contours).sort(key=lambda x: -cv2.contourArea(x))
 		if len(contours)>0:
 			if self.capture_flag:
-				cv2.imwrite("/home/atharva/Documents/test"+str(self.counter)+".jpg", image)
+				cv2.imwrite("/home/sid/Desktop/test"+str(self.img_counter)+".jpg", image)
+				self.img_counter+=1
+				
 				print("Img saved")
 				self.capture_flag=0
 			M = cv2.moments(contours[0])
@@ -155,7 +159,9 @@ class Edrone():
 	def findWaypoint(self, step):
 		# TODO : Ball Detect nantar way point assign karna.
 		if len(self.waypoint_queue)==0:
+			
 			self.counter += 1
+
 			if self.counter % 2:
 				# self.waypoint[1] += step*(self.counter//2)*((-1)**(self.counter//2+1))
 				waypoint_1 = self.keypoints[1] + step*(self.counter//2)*((-1)**(self.counter//2+1))
@@ -198,6 +204,11 @@ class Edrone():
 		
 		if (error[0]>-0.2 and error[0]<0.2) and (error[1]>-0.2 and error[1]<0.2) and (error[2]>-0.2 and error[2]<0.2):
 			print(self.counter, self.waypoint, self.flag)
+			data = Geolocation()
+			data.objectid = f"{self.img_counter}"
+			data.lat = 1
+			data.long = 2
+			self.loation_pblisher.publish(data)
 			if  self.flag:
 				self.findWaypoint(7)
 				return
