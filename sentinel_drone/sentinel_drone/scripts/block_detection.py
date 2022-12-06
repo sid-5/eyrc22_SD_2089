@@ -13,6 +13,7 @@ from sensor_msgs.msg import Image
 from cv_bridge import CvBridge as bridge
 import cv2 
 import numpy as np
+from osgeo import gdal
 from sentinel_drone.msg import Geolocation
 
 class Edrone():
@@ -53,6 +54,9 @@ class Edrone():
 		self.prev = [0,0]
 		self.waypoint_queue = []
 		self.keypoints = [0,0]
+		self.ds = gdal.Open('/home/atharva/Documents/task2d.tif')
+        # GDAL affine transform parameters, According to gdal documentation xoff/yoff are image left corner, a/e are pixel wight/height and b/d is rotation and is zero if image is north up. 
+		self.xoff, self.a, self.b, self.yoff, self.d, self.e = self.ds.GetGeoTransform()
 
 		# Publishing /drone_command, /alt_error, /pitch_error, /roll_error
 		self.command_pub = rospy.Publisher('/drone_command', edrone_msgs, queue_size=1)
@@ -71,6 +75,22 @@ class Edrone():
 
 		self.arm() # ARMING THE DRONE
 
+	def pixel2coord(self, x, y):
+		"""Returns global coordinates from pixel x, y coords"""
+		xp = self.a * x + self.b * y + self.xoff
+		yp = self.d * x + self.e * y + self.yoff
+		return(xp, yp)
+
+	def validImage(self, image_mask):
+		contours, hierarchy = cv2.findContours(image_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+		M = cv2.moments(contours[0])
+		X = int(M['m10'] / M['m00'])
+		Y = int(M['m01'] / M['m00'])
+		if (X>150 and X<500) and (Y>150 and Y<360):
+			return True
+		else:
+			return False
+
 	def get_image(self,img_msg):
 		br = bridge()
 		img = br.imgmsg_to_cv2(img_msg, "passthrough")
@@ -85,23 +105,27 @@ class Edrone():
 		opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=3)
 
 		contours, hierarchy = cv2.findContours(opening, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+		height, width, n_channels = img.shape
 		# list(contours).sort(key=lambda x: -cv2.contourArea(x))
 		if len(contours)>0:
-			if self.capture_flag:
-				cv2.imwrite("/home/sid/Desktop/test"+str(self.img_counter)+".jpg", image)
-				self.img_counter+=1
-				
-				print("Img saved")
-				self.capture_flag=0
 			M = cv2.moments(contours[0])
 			X = int(M['m10'] / M['m00'])
 			Y = int(M['m01'] / M['m00'])
-			height, width, n_channels = img.shape
+			if self.capture_flag and self.validImage(opening):
+				cv2.imwrite("/home/atharva/Documents/test"+str(self.img_counter)+".jpg", image)
+				self.img_counter+=1
+				print("Img saved")
+				self.capture_flag=0
+				print(X, Y, self.pixel2coord(X, Y))
+				data = Geolocation()
+				data.objectid = f"{self.img_counter}"
+				data.lat, data.long  = self.pixel2coord(X, Y)
+				self.loation_pblisher.publish(data)
 			self.flag =0
 			self.waypoint_flag = 1
 			if self.waypoint_flag:
 				self.waypoint = [self.waypoint[0]-((width/2-X)/2600),self.waypoint[1]-((height/2-Y)/3100),21]
-				print(self.waypoint)
+				# print(self.waypoint)
 				self.waypoint_flag = 0
 		else:
 			self.waypoint_flag = 1
@@ -157,7 +181,6 @@ class Edrone():
 
 	#----------------------------------------------------------------------------------------------------------------------
 	def findWaypoint(self, step):
-		# TODO : Ball Detect nantar way point assign karna.
 		if len(self.waypoint_queue)==0:
 			
 			self.counter += 1
@@ -204,11 +227,6 @@ class Edrone():
 		
 		if (error[0]>-0.2 and error[0]<0.2) and (error[1]>-0.2 and error[1]<0.2) and (error[2]>-0.2 and error[2]<0.2):
 			print(self.counter, self.waypoint, self.flag)
-			data = Geolocation()
-			data.objectid = f"{self.img_counter}"
-			data.lat = 1
-			data.long = 2
-			self.loation_pblisher.publish(data)
 			if  self.flag:
 				self.findWaypoint(7)
 				return
