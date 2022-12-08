@@ -55,7 +55,9 @@ class Edrone():
 		self.prev = [0,0]
 		self.waypoint_queue = []
 		self.keypoints = [0,0]
-		self.ds = gdal.Open('/home/atharva/Documents/task2d.tif')
+		self.ds = gdal.Open('/home/rajas/Sentinel_drone/Task_2d/task2d.tif')
+		self.base_img = cv2.imread('/home/rajas/Sentinel_drone/Task_2d/task2d.tif')
+		self.base_img = cv2.cvtColor(self.base_img, cv2.COLOR_BGR2GRAY)
         # GDAL affine transform parameters, According to gdal documentation xoff/yoff are image left corner, a/e are pixel wight/height and b/d is rotation and is zero if image is north up. 
 		self.xoff, self.a, self.b, self.yoff, self.d, self.e = self.ds.GetGeoTransform()
 
@@ -84,7 +86,7 @@ class Edrone():
 
 	def pixel2coord_forBoxCentre(self, x, y):
 		"""Returns global coordinates from pixel x, y coords"""
-		ds = gdal.Open('/home/atharva/Documents/crs_updated.tif')
+		ds = gdal.Open('/home/rajas/Sentinel_drone/Task_2d/crs_updated.tif')
         # GDAL affine transform parameters, According to gdal documentation xoff/yoff are image left corner, a/e are pixel wight/height and b/d is rotation and is zero if image is north up. 
 		xoff, a, b, yoff, d, e = ds.GetGeoTransform()
 		xp = a * x + b * y + xoff
@@ -96,23 +98,24 @@ class Edrone():
 		M = cv2.moments(contours[0])
 		X = int(M['m10'] / M['m00'])
 		Y = int(M['m01'] / M['m00'])
-		if (X>150 and X<500) and (Y>150 and Y<360):
+		if (X>280 and X<360) and (Y>200 and Y<280):
 			return True
 		else:
 			return False
 
-	def geoReference(self, image):
+	def geoReference(self, image_path):
 		"""
 		image -> captured by drone.
 		"""
-		img1 = cv2.imread('task2d.tif')  # CHECK THE PATH to the map.
-		img1 = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
+		image = cv2.imread(image_path)
+		#img1 = cv2.imread('/home/rajas/Sentinel_drone/Task_2d/task2d.tif')  # CHECK THE PATH to the map.
+		#img1 = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
 		img2 = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
 		#sift
 		sift = cv2.SIFT_create()
 
-		keypoints_1, descriptors_1 = sift.detectAndCompute(img1,None)
+		keypoints_1, descriptors_1 = sift.detectAndCompute(self.base_img,None)
 		keypoints_2, descriptors_2 = sift.detectAndCompute(img2,None)
 
 		#feature matching
@@ -128,7 +131,7 @@ class Edrone():
 			x_img, y_img = (keypoints_2[m.trainIdx].pt)
 			x_new, y_new = self.pixel2coord(x_base, y_base)
 			query += f"-gcp {x_img} {y_img} {x_new} {y_new} "
-		query += f"-of GTiff {image} map-with-gcps.tif"
+		query += f"-of GTiff /home/rajas/Sentinel_drone/Task_2d/test/test{self.img_counter}.jpg map-with-gcps.tif"
 		cmd1 = query.split(" ")
 		for i in cmd1:
 			if i == '':
@@ -162,11 +165,12 @@ class Edrone():
 			X = int(M['m10'] / M['m00'])
 			Y = int(M['m01'] / M['m00'])
 			if self.capture_flag and self.validImage(opening):
-				cv2.imwrite("/home/atharva/Documents/test"+str(self.img_counter)+".jpg", image)
+				new_img_path = "/home/rajas/Sentinel_drone/Task_2d/test/test"+str(self.img_counter)+".jpg"
+				cv2.imwrite(new_img_path, image)
 				self.img_counter+=1
 				print("Img saved")
 				self.capture_flag=0
-				self.geoReference(image)
+				self.geoReference(new_img_path)
 				print(X, Y, self.pixel2coord_forBoxCentre(X, Y))
 				data = Geolocation()
 				data.objectid = f"{self.img_counter}"
