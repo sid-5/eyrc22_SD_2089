@@ -15,6 +15,7 @@ import cv2
 import numpy as np
 from osgeo import gdal
 from sentinel_drone.msg import Geolocation
+import subprocess
 
 class Edrone():
 	def __init__(self):
@@ -81,6 +82,15 @@ class Edrone():
 		yp = self.d * x + self.e * y + self.yoff
 		return(xp, yp)
 
+	def pixel2coord_forBoxCentre(self, x, y):
+		"""Returns global coordinates from pixel x, y coords"""
+		ds = gdal.Open('/home/atharva/Documents/crs_updated.tif')
+        # GDAL affine transform parameters, According to gdal documentation xoff/yoff are image left corner, a/e are pixel wight/height and b/d is rotation and is zero if image is north up. 
+		xoff, a, b, yoff, d, e = ds.GetGeoTransform()
+		xp = a * x + b * y + xoff
+		yp = d * x + e * y + yoff
+		return(xp, yp)
+
 	def validImage(self, image_mask):
 		contours, hierarchy = cv2.findContours(image_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
 		M = cv2.moments(contours[0])
@@ -111,13 +121,26 @@ class Edrone():
 		matches = bf.match(descriptors_1,descriptors_2)
 		matches = sorted(matches, key = lambda x:x.distance)
 
+		query = "gdal_translate "
+
 		for m in matches[:50]:
 			x_base, y_base = (keypoints_1[m.queryIdx].pt)
 			x_img, y_img = (keypoints_2[m.trainIdx].pt)
 			x_new, y_new = self.pixel2coord(x_base, y_base)
-
+			query += f"-gcp {x_img} {y_img} {x_new} {y_new} "
+		query += f"-of GTiff {image} map-with-gcps.tif"
+		cmd1 = query.split(" ")
+		for i in cmd1:
+			if i == '':
+				print(i)
+				cmd1.remove(i)
+		subprocess.run(cmd1)
 			#EXECUTE THE QUERIES FOR GEOREF -> THEN OPEN THE GEOTIFF FILE -> PIXEL2COORD on the centre point wrt translated geotiff file.
-
+		t_srs = "+proj=longlat +ellps=WGS84"
+		cmd2 = ["gdalwarp", "-overwrite", "map-with-gcps.tif","crs_updated.tif", "-t_srs", t_srs]
+		subprocess.run(cmd2)
+		print("GDAL Warp done...")
+	
 	def get_image(self,img_msg):
 		br = bridge()
 		img = br.imgmsg_to_cv2(img_msg, "passthrough")
@@ -143,7 +166,8 @@ class Edrone():
 				self.img_counter+=1
 				print("Img saved")
 				self.capture_flag=0
-				print(X, Y, self.pixel2coord(X, Y))
+				self.geoReference(image)
+				print(X, Y, self.pixel2coord_forBoxCentre(X, Y))
 				data = Geolocation()
 				data.objectid = f"{self.img_counter}"
 				data.lat, data.long  = self.pixel2coord(X, Y)
