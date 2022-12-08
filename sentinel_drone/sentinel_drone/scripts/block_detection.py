@@ -54,7 +54,7 @@ class Edrone():
 		self.prev = [0,0]
 		self.waypoint_queue = []
 		self.keypoints = [0,0]
-		self.ds = gdal.Open('/home/atharva/Documents/task2d.tif')
+		self.ds = gdal.Open('/home/sid/Downloads/task2d.tif')
         # GDAL affine transform parameters, According to gdal documentation xoff/yoff are image left corner, a/e are pixel wight/height and b/d is rotation and is zero if image is north up. 
 		self.xoff, self.a, self.b, self.yoff, self.d, self.e = self.ds.GetGeoTransform()
 

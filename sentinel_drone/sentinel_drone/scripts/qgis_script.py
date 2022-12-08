@@ -9,7 +9,7 @@ import time
 
 
 def location_callback(msg):
-	rospy.loginfo(msg.lat)
+	rospy.loginfo(f"received data {msg.lat}")
 def qgis_lat():
 	rospy.init_node('qgis')
 	rospy.Subscriber('/geolocation', Geolocation, location_callback)
