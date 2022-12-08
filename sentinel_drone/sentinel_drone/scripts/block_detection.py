@@ -176,8 +176,8 @@ class Edrone():
 				self.geoReference(new_img_path)
 				lat, lon = self.pixel2coord_forBoxCentre(X, Y)
 				print(X, Y, lat, lon)
-				f = open("/home/sid/Downloads/YellowBox.csv", "w") #PATH
-				f.append(f"{self.img_counter},{lat},{lon}\n")
+				f = open("/home/sid/Downloads/YellowBox.csv", "a") #PATH
+				f.write(f"{self.img_counter},{lat},{lon}\n")
 				f.close()
 				data = Geolocation()
 				data.objectid = f"{self.img_counter}"
