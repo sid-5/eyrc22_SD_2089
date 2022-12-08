@@ -61,6 +61,10 @@ class Edrone():
         # GDAL affine transform parameters, According to gdal documentation xoff/yoff are image left corner, a/e are pixel wight/height and b/d is rotation and is zero if image is north up. 
 		self.xoff, self.a, self.b, self.yoff, self.d, self.e = self.ds.GetGeoTransform()
 
+		self.f = open("/home/sid/Downloads/YellowBox.csv", "w") #PATH
+		self.f.write(f'obj_id,lat,lon\n')
+		self.f.close()
+
 		# Publishing /drone_command, /alt_error, /pitch_error, /roll_error
 		self.command_pub = rospy.Publisher('/drone_command', edrone_msgs, queue_size=1)
 		self.pitch_err_publisher = rospy.Publisher('/pitch_error', Float64, queue_size=1)
@@ -170,12 +174,16 @@ class Edrone():
 				print("Img saved")
 				self.capture_flag=0
 				self.geoReference(new_img_path)
-				print(X, Y, self.pixel2coord_forBoxCentre(X, Y))
-				self.img_counter+=1
+				lat, lon = self.pixel2coord_forBoxCentre(X, Y)
+				print(X, Y, lat, lon)
+				f = open("/home/sid/Downloads/YellowBox.csv", "w") #PATH
+				f.append(f"{self.img_counter},{lat},{lon}\n")
+				f.close()
 				data = Geolocation()
 				data.objectid = f"{self.img_counter}"
-				data.lat, data.long  = self.pixel2coord(X, Y)
+				data.lat, data.long  = lat, lon
 				self.loation_pblisher.publish(data)
+				self.img_counter+=1
 			self.flag =0
 			self.waypoint_flag = 1
 			if self.waypoint_flag:
