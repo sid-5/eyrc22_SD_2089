@@ -27,6 +27,6 @@
     <remap from="image" to="/edrone/camera_rgb/image_raw"/>
   </node>
 <node pkg="sentinel_drone" type="block_detection.py" name="block_detection" output="screen"/>
-<node pkg="sentinel_drone" type="qgis_script.py" name="qgis_script" output="screen"/>
+<!--<node pkg="sentinel_drone" type="qgis_script.py" name="qgis_script" output="screen"/>-->
 </launch>
  

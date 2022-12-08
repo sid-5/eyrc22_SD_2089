@@ -8,8 +8,21 @@ import rospy
 import time
 
 
+
+canvas = iface.mapCanvas()
+
+
 def location_callback(msg):
 	rospy.loginfo(f"received data {msg.lat}")
+	pnt = QgsPointXY(msg.long, msg.lat)
+	m = QgsVertexMarker(canvas)
+	m.setCenter(pnt)
+	m.setColor(QColor('Black'))
+	m.setIconType(QgsVertexMarker.ICON_CIRCLE)
+	m.setIconSize(12)
+	m.setPenWidth(1)
+	m.setFillColor(QColor(0, 200, 0))
+
 def qgis_lat():
 	rospy.init_node('qgis')
 	rospy.Subscriber('/geolocation', Geolocation, location_callback)
