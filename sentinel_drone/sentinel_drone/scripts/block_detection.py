@@ -16,9 +16,10 @@ import numpy as np
 from osgeo import gdal
 from sentinel_drone.msg import Geolocation
 import subprocess
+import os
 
 class Edrone():
-	def __init__(self):
+	def __init__(self,f):
 		
 		rospy.init_node('drone_control')	# initializing ros node with name drone_control
 
@@ -60,10 +61,9 @@ class Edrone():
 		self.base_img = cv2.cvtColor(self.base_img, cv2.COLOR_BGR2GRAY)
         # GDAL affine transform parameters, According to gdal documentation xoff/yoff are image left corner, a/e are pixel wight/height and b/d is rotation and is zero if image is north up. 
 		self.xoff, self.a, self.b, self.yoff, self.d, self.e = self.ds.GetGeoTransform()
-
-		self.f = open("/home/sid/Downloads/YellowBox.csv", "w") #PATH
+		self.centres = []
+		self.f = f
 		self.f.write(f'obj_id,lat,lon\n')
-		self.f.close()
 
 		# Publishing /drone_command, /alt_error, /pitch_error, /roll_error
 		self.command_pub = rospy.Publisher('/drone_command', edrone_msgs, queue_size=1)
@@ -169,20 +169,20 @@ class Edrone():
 			X = int(M['m10'] / M['m00'])
 			Y = int(M['m01'] / M['m00'])
 			if self.capture_flag and self.validImage(opening):
-				new_img_path = "/home/sid/Downloads/"+str(self.img_counter)+".jpg"
+				new_img_path = "/home/sid/catkin_ws/src/sentinel_drone/Images/"+str(self.img_counter)+".jpg"
 				cv2.imwrite(new_img_path, image)
-				print("Img saved")
+				self.centres.append([X,Y])
+				print("Img saved",self.img_counter)
 				self.capture_flag=0
-				self.geoReference(new_img_path)
-				lat, lon = self.pixel2coord_forBoxCentre(X, Y)
-				print(X, Y, lat, lon)
-				f = open("/home/sid/Downloads/YellowBox.csv", "a") #PATH
-				f.write(f"{self.img_counter},{lat},{lon}\n")
-				f.close()
-				data = Geolocation()
-				data.objectid = f"{self.img_counter}"
-				data.lat, data.long  = lat, lon
-				self.loation_pblisher.publish(data)
+				# self.geoReference(new_img_path)
+				# lat, lon = self.pixel2coord_forBoxCentre(X, Y)
+				# print(X, Y, lat, lon, self.img_counter)
+				# self.f.write(f"{self.img_counter},{lat},{lon}\n")
+				# data = Geolocation()
+				# data.objectid = f"{self.img_counter}"
+				# data.lat, data.long  = lat, lon
+				# data.lat, data.long  = 0,0
+				# self.loation_pblisher.publish(data)
 				self.img_counter+=1
 			self.flag =0
 			self.waypoint_flag = 1
@@ -292,13 +292,11 @@ class Edrone():
 			print(self.counter, self.waypoint, self.flag)
 			if  self.flag:
 				self.findWaypoint(7)
-				return
 			else:
 				self.capture_flag = 1
 				self.waypoint[0:2] = self.prev
 				self.findWaypoint(7)
 				self.flag = 1
-				return
 		#using clipping technique to control integral part of throttle as roll and pitch have no integral part
 		I_throttle = (self.prevI[2] + error[2]) * self.Ki[2]
 		if (error[2]>0 and I_throttle<0) or (error[2]<0 and I_throttle>0) or I_throttle<-50 or I_throttle>0 or error[2]<-1 or error[2]>1:
@@ -348,11 +346,23 @@ class Edrone():
 
 
 if __name__ == '__main__':
-
-	e_drone = Edrone()
+	f  = open("/home/sid/catkin_ws/src/sentinel_drone/YellowBox.csv", "w") #PATH
+	e_drone = Edrone(f)
 	print("started node")
 	r = rospy.Rate(e_drone.sample_freq) #specify rate in Hz based upon your desired PID sampling time, i.e. if desired sample time is 33ms specify rate as 30Hz
 	time.sleep(6)
 	while not rospy.is_shutdown():
-		e_drone.pid()
+		if e_drone.img_counter!=1:
+			e_drone.pid()
+		else:
+			print("inside else")
+			e_drone.disarm()
+			count = 0
+			for i in sorted(os.listdir("/home/sid/catkin_ws/src/sentinel_drone/Images")): #PATH"):
+				print(i)
+				e_drone.geoReference("/home/sid/catkin_ws/src/sentinel_drone/Images/"+i)
+				lat, lon = e_drone.pixel2coord_forBoxCentre(e_drone.centres[count][0], e_drone.centres[count][1])
+				print(e_drone.centres[count][0], e_drone.centres[count][1], lat, lon)
+				f.write(f"{i},{lat},{lon}\n")
 		r.sleep()
+	f.close()
