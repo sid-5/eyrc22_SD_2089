@@ -16,13 +16,14 @@ from osgeo import gdal
 from sentinel_drone.msg import Geolocation
 import subprocess
 
-task2D_img_path = "/home/rajas/Sentinel_drone/Task_2d/task2d.tif"
-saved_imgs_path = "/home/rajas/Sentinel_drone/Task_2d/test2"
-csv_path = "/home/rajas/Sentinel_drone/Task_2d/test2/yellow_box.csv"
+task2D_img_path = "/home/atharva/Documents/task2d.tif"
+saved_imgs_path = "/home/atharva/Documents/test2"
+csv_path = "/home/atharva/Documents/yellow_box.csv"
+
 f  = open(csv_path, "w") #PATH
 
 class Edrone():
-	def __init__(self):
+	def __init__(self, f):
 		
 		rospy.init_node('drone_control')	# initializing ros node with name drone_control
 
@@ -65,9 +66,8 @@ class Edrone():
         # GDAL affine transform parameters, According to gdal documentation xoff/yoff are image left corner, a/e are pixel wight/height and b/d is rotation and is zero if image is north up. 
 		self.xoff, self.a, self.b, self.yoff, self.d, self.e = self.ds.GetGeoTransform()
 
-		self.f = open(csv_path, "w") #PATH
+		self.f = f
 		self.f.write(f'obj_id,lat,lon\n')
-		self.f.close()
 
 		# Publishing /drone_command, /alt_error, /pitch_error, /roll_error
 		self.command_pub = rospy.Publisher('/drone_command', edrone_msgs, queue_size=1)
@@ -134,7 +134,7 @@ class Edrone():
 
 		query = "gdal_translate "
 
-		for m in matches[:8]:
+		for m in matches[:10]:
 			x_base, y_base = (keypoints_1[m.queryIdx].pt)
 			x_img, y_img = (keypoints_2[m.trainIdx].pt)
 			x_new, y_new = self.pixel2coord(x_base, y_base)
@@ -172,7 +172,7 @@ class Edrone():
 			M = cv2.moments(contours[0])
 			X = int(M['m10'] / M['m00'])
 			Y = int(M['m01'] / M['m00'])
-			if self.capture_flag and self.validImage(opening):
+			if self.capture_flag and self.validImage(opening) and not self.waypoint_flag:
 				new_img_path = saved_imgs_path+"/"+str(self.img_counter)+".jpg"
 				cv2.imwrite(new_img_path, image)
 				print("Img saved")
@@ -180,9 +180,7 @@ class Edrone():
 				self.geoReference(new_img_path)
 				lat, lon = self.pixel2coord_forBoxCentre(X, Y,new_img_path)
 				print(X, Y, lat, lon)
-				f = open(csv_path, "a") #PATH
-				f.write(f"{self.img_counter},{lat},{lon}\n")
-				f.close()
+				self.f.write(f"{self.img_counter},{lat},{lon}\n")
 				data = Geolocation()
 				data.objectid = f"{self.img_counter}"
 				data.lat, data.long  = lat, lon
@@ -191,16 +189,18 @@ class Edrone():
 
 				# HE IMPLEMENT KARTA YEIL KA?
 
-				# print("Length: ",len(self.waypoint_queue))
-				# if len(self.waypoint_queue):
-				# 	print(self.waypoint_queue[0][0], ", ", self.waypoint[0])
-				# 	print(self.waypoint_queue[0][1] ,", ", self.waypoint[1])
-				# if len(self.waypoint_queue) and abs(self.waypoint_queue[0][0] - self.waypoint[0]) < 2 and abs(self.waypoint_queue[0][1] - self.waypoint[1]) < 2:
-				# 	self.waypoint_queue.pop(0)
-				# 	print("**inside thresh check ",self.waypoint_queue)
-				# self.findWaypoint(7)
-				# return
- 
+				print("Length: ",len(self.waypoint_queue))
+				if len(self.waypoint_queue):
+					print(self.waypoint_queue[0][0], ", ", self.waypoint[0])
+					print(self.waypoint_queue[0][1] ,", ", self.waypoint[1])
+					self.waypoint_queue.pop(0)
+					print("**inside thresh check ",self.waypoint_queue, self.waypoint)
+					if abs(self.waypoint_queue[0][0] - self.waypoint[0]) < 2 or abs(self.waypoint_queue[0][1] - self.waypoint[1]) < 2:
+						self.findWaypoint(7)
+				else:
+					self.findWaypoint(7)
+				print(f"New waypoint after image capture: {self.waypoint}")
+				return
 			self.flag =0
 			self.waypoint_flag = 1
 			if self.waypoint_flag:
@@ -305,7 +305,7 @@ class Edrone():
 		error[1] = self.drone_position[1] - self.waypoint[1]
 		error[2] = self.drone_position[2] - self.waypoint[2]
 		
-		if (error[0]>-0.2 and error[0]<0.2) and (error[1]>-0.2 and error[1]<0.2) and (error[2]>-0.2 and error[2]<0.2):
+		if (error[0]>-0.15 and error[0]<0.15) and (error[1]>-0.15 and error[1]<0.15) and (error[2]>-0.15 and error[2]<0.15):
 			print(self.counter, self.waypoint, self.flag)
 			if  self.flag:
 				self.findWaypoint(7)
@@ -365,11 +365,11 @@ class Edrone():
 
 
 if __name__ == '__main__':
-
-	e_drone = Edrone()
+	e_drone = Edrone(f)
 	print("started node")
 	r = rospy.Rate(e_drone.sample_freq) #specify rate in Hz based upon your desired PID sampling time, i.e. if desired sample time is 33ms specify rate as 30Hz
 	time.sleep(6)
 	while not rospy.is_shutdown():
 		e_drone.pid()
 		r.sleep()
+	f.close()
