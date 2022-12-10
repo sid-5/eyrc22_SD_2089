@@ -188,7 +188,8 @@ class Edrone():
 				data.lat, data.long  = lat, lon
 				self.loation_pblisher.publish(data)
 				self.img_counter+=1
-				### HE IMPLEMENT KARU SHAKTO KA???
+
+				# HE IMPLEMENT KARTA YEIL KA?
 
 				# print("Length: ",len(self.waypoint_queue))
 				# if len(self.waypoint_queue):
@@ -198,8 +199,8 @@ class Edrone():
 				# 	self.waypoint_queue.pop(0)
 				# 	print("**inside thresh check ",self.waypoint_queue)
 				# self.findWaypoint(7)
-				# return 
-
+				# return
+ 
 			self.flag =0
 			self.waypoint_flag = 1
 			if self.waypoint_flag:
