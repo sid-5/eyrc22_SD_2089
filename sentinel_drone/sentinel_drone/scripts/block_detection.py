@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-
 from edrone_client.msg import *
 from geometry_msgs.msg import PoseArray
 from std_msgs.msg import Int16
@@ -16,6 +15,11 @@ import numpy as np
 from osgeo import gdal
 from sentinel_drone.msg import Geolocation
 import subprocess
+
+task2D_img_path = "/home/rajas/Sentinel_drone/Task_2d/task2d.tif"
+saved_imgs_path = "/home/rajas/Sentinel_drone/Task_2d/test2"
+csv_path = "/home/rajas/Sentinel_drone/Task_2d/test2/yellow_box.csv"
+f  = open(csv_path, "w") #PATH
 
 class Edrone():
 	def __init__(self):
@@ -44,7 +48,7 @@ class Edrone():
 		self.waypoint_flag = 0
 		self.img_counter= 0
 		#initial setting of Kp, Kd and ki for [roll, pitch, throttle]
-		self.Kp = [26.6,26.6,39.5]
+		self.Kp = [20.6,20.6,39.5]
 		self.Ki = [0,0,0.0] #197
 		self.Kd = [1200,1200,900] #1223
 		self.prev_values = [0,0,0]
@@ -55,13 +59,13 @@ class Edrone():
 		self.prev = [0,0]
 		self.waypoint_queue = []
 		self.keypoints = [0,0]
-		self.ds = gdal.Open('/home/sid/Downloads/task2d.tif')
-		self.base_img = cv2.imread('/home/sid/Downloads/task2d.tif')
+		self.ds = gdal.Open(task2D_img_path)
+		self.base_img = cv2.imread(task2D_img_path)
 		self.base_img = cv2.cvtColor(self.base_img, cv2.COLOR_BGR2GRAY)
         # GDAL affine transform parameters, According to gdal documentation xoff/yoff are image left corner, a/e are pixel wight/height and b/d is rotation and is zero if image is north up. 
 		self.xoff, self.a, self.b, self.yoff, self.d, self.e = self.ds.GetGeoTransform()
 
-		self.f = open("/home/sid/Downloads/YellowBox.csv", "w") #PATH
+		self.f = open(csv_path, "w") #PATH
 		self.f.write(f'obj_id,lat,lon\n')
 		self.f.close()
 
@@ -88,9 +92,9 @@ class Edrone():
 		yp = self.d * x + self.e * y + self.yoff
 		return(xp, yp)
 
-	def pixel2coord_forBoxCentre(self, x, y):
+	def pixel2coord_forBoxCentre(self, x, y, image_path):
 		"""Returns global coordinates from pixel x, y coords"""
-		ds = gdal.Open('crs_updated.tif')
+		ds = gdal.Open(f'{image_path}.tif')
         # GDAL affine transform parameters, According to gdal documentation xoff/yoff are image left corner, a/e are pixel wight/height and b/d is rotation and is zero if image is north up. 
 		xoff, a, b, yoff, d, e = ds.GetGeoTransform()
 		xp = a * x + b * y + xoff
@@ -117,25 +121,25 @@ class Edrone():
 		img2 = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
 		#sift
-		sift = cv2.SIFT_create()
+		orb = cv2.ORB_create(50000)
 
-		keypoints_1, descriptors_1 = sift.detectAndCompute(self.base_img,None)
-		keypoints_2, descriptors_2 = sift.detectAndCompute(img2,None)
+		keypoints_1, descriptors_1 = orb.detectAndCompute(self.base_img,None)
+		keypoints_2, descriptors_2 =orb.detectAndCompute(img2,None)
 
 		#feature matching
-		bf = cv2.BFMatcher(cv2.NORM_L1, crossCheck=True)
+		bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
 
 		matches = bf.match(descriptors_1,descriptors_2)
 		matches = sorted(matches, key = lambda x:x.distance)
 
 		query = "gdal_translate "
 
-		for m in matches[:50]:
+		for m in matches[:8]:
 			x_base, y_base = (keypoints_1[m.queryIdx].pt)
 			x_img, y_img = (keypoints_2[m.trainIdx].pt)
 			x_new, y_new = self.pixel2coord(x_base, y_base)
 			query += f"-gcp {x_img} {y_img} {x_new} {y_new} "
-		query += f"-of GTiff /home/sid/Downloads/{self.img_counter}.jpg map-with-gcps.tif"
+		query += f"-of GTiff {image_path} map-with-gcps.tif"
 		cmd1 = query.split(" ")
 		for i in cmd1:
 			if i == '':
@@ -144,7 +148,7 @@ class Edrone():
 		subprocess.run(cmd1)
 			#EXECUTE THE QUERIES FOR GEOREF -> THEN OPEN THE GEOTIFF FILE -> PIXEL2COORD on the centre point wrt translated geotiff file.
 		t_srs = "+proj=longlat +ellps=WGS84"
-		cmd2 = ["gdalwarp", "-overwrite", "map-with-gcps.tif","crs_updated.tif", "-t_srs", t_srs]
+		cmd2 = ["gdalwarp", "-overwrite", "map-with-gcps.tif",f"{image_path}.tif", "-t_srs", t_srs]
 		subprocess.run(cmd2)
 		print("GDAL Warp done...")
 	
@@ -169,14 +173,14 @@ class Edrone():
 			X = int(M['m10'] / M['m00'])
 			Y = int(M['m01'] / M['m00'])
 			if self.capture_flag and self.validImage(opening):
-				new_img_path = "/home/sid/Downloads/"+str(self.img_counter)+".jpg"
+				new_img_path = saved_imgs_path+"/"+str(self.img_counter)+".jpg"
 				cv2.imwrite(new_img_path, image)
 				print("Img saved")
 				self.capture_flag=0
 				self.geoReference(new_img_path)
-				lat, lon = self.pixel2coord_forBoxCentre(X, Y)
+				lat, lon = self.pixel2coord_forBoxCentre(X, Y,new_img_path)
 				print(X, Y, lat, lon)
-				f = open("/home/sid/Downloads/YellowBox.csv", "a") #PATH
+				f = open(csv_path, "a") #PATH
 				f.write(f"{self.img_counter},{lat},{lon}\n")
 				f.close()
 				data = Geolocation()
@@ -184,6 +188,18 @@ class Edrone():
 				data.lat, data.long  = lat, lon
 				self.loation_pblisher.publish(data)
 				self.img_counter+=1
+				### HE IMPLEMENT KARU SHAKTO KA???
+
+				# print("Length: ",len(self.waypoint_queue))
+				# if len(self.waypoint_queue):
+				# 	print(self.waypoint_queue[0][0], ", ", self.waypoint[0])
+				# 	print(self.waypoint_queue[0][1] ,", ", self.waypoint[1])
+				# if len(self.waypoint_queue) and abs(self.waypoint_queue[0][0] - self.waypoint[0]) < 2 and abs(self.waypoint_queue[0][1] - self.waypoint[1]) < 2:
+				# 	self.waypoint_queue.pop(0)
+				# 	print("**inside thresh check ",self.waypoint_queue)
+				# self.findWaypoint(7)
+				# return 
+
 			self.flag =0
 			self.waypoint_flag = 1
 			if self.waypoint_flag:
@@ -254,11 +270,11 @@ class Edrone():
 				print(f'{self.keypoints} is old corner point')
 				print(f'{self.keypoints[0]},{waypoint_1} is new corner point')
 				print(f'{self.counter} is current counter')
-				if waypoint_1>self.waypoint[1]:
-					for i in range(self.waypoint[1], waypoint_1, 7): #check step
+				if waypoint_1>self.keypoints[1]:
+					for i in range(self.keypoints[1], waypoint_1, 7): #check step
 						self.waypoint_queue.append((self.keypoints[0], i))
 				else:
-					for i in range(self.waypoint[1], waypoint_1, -7):
+					for i in range(self.keypoints[1], waypoint_1, -7):
 						self.waypoint_queue.append((self.keypoints[0], i))
 				self.waypoint_queue.append((self.keypoints[0], waypoint_1))
 				self.keypoints[1] = waypoint_1
@@ -267,11 +283,11 @@ class Edrone():
 				print(f'{self.keypoints} is old corner point')
 				print(f'{waypoint_0},{self.keypoints[1]} is new corner point')
 				print(f'{self.counter} is current counter pnt')
-				if waypoint_0>self.waypoint[0]:
-					for i in range(self.waypoint[0], waypoint_0, 7):
+				if waypoint_0>self.keypoints[0]:
+					for i in range(self.keypoints[0], waypoint_0, 7):
 						self.waypoint_queue.append((i, self.keypoints[1]))
 				else:
-					for i in range(self.waypoint[0], waypoint_0, -7):
+					for i in range(self.keypoints[0], waypoint_0, -7):
 						self.waypoint_queue.append((i, self.keypoints[1]))
 				self.waypoint_queue.append((waypoint_0, self.keypoints[1]))
 				self.keypoints[0] = waypoint_0
