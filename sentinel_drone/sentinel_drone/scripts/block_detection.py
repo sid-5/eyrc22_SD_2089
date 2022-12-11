@@ -49,7 +49,7 @@ class Edrone():
 		self.waypoint_flag = 0
 		self.img_counter= 0
 		#initial setting of Kp, Kd and ki for [roll, pitch, throttle]
-		self.Kp = [20.6,20.6,39.5]
+		self.Kp = [25.6,25.6,39.5]
 		self.Ki = [0,0,0.0] #197
 		self.Kd = [1200,1200,900] #1223
 		self.prev_values = [0,0,0]
@@ -134,7 +134,7 @@ class Edrone():
 
 		query = "gdal_translate "
 
-		for m in matches[:10]:
+		for m in matches[:8]:
 			x_base, y_base = (keypoints_1[m.queryIdx].pt)
 			x_img, y_img = (keypoints_2[m.trainIdx].pt)
 			x_new, y_new = self.pixel2coord(x_base, y_base)
@@ -175,7 +175,7 @@ class Edrone():
 			if self.capture_flag and self.validImage(opening) and not self.waypoint_flag:
 				new_img_path = saved_imgs_path+"/"+str(self.img_counter)+".jpg"
 				cv2.imwrite(new_img_path, image)
-				print("Img saved")
+				print("Img saved", self.img_counter)
 				self.capture_flag=0
 				self.geoReference(new_img_path)
 				lat, lon = self.pixel2coord_forBoxCentre(X, Y,new_img_path)
@@ -190,13 +190,14 @@ class Edrone():
 				# HE IMPLEMENT KARTA YEIL KA?
 
 				print("Length: ",len(self.waypoint_queue))
+				print(f"waypoint on image capture: {self.waypoint}")
 				if len(self.waypoint_queue):
 					print(self.waypoint_queue[0][0], ", ", self.waypoint[0])
 					print(self.waypoint_queue[0][1] ,", ", self.waypoint[1])
-					self.waypoint_queue.pop(0)
-					print("**inside thresh check ",self.waypoint_queue, self.waypoint)
 					if abs(self.waypoint_queue[0][0] - self.waypoint[0]) < 2 or abs(self.waypoint_queue[0][1] - self.waypoint[1]) < 2:
-						self.findWaypoint(7)
+						self.waypoint_queue.pop(0)
+					self.findWaypoint(7)
+					print("**inside thresh check ",self.waypoint_queue, self.waypoint)
 				else:
 					self.findWaypoint(7)
 				print(f"New waypoint after image capture: {self.waypoint}")
@@ -272,10 +273,10 @@ class Edrone():
 				print(f'{self.keypoints[0]},{waypoint_1} is new corner point')
 				print(f'{self.counter} is current counter')
 				if waypoint_1>self.keypoints[1]:
-					for i in range(self.keypoints[1], waypoint_1, 7): #check step
+					for i in range(self.keypoints[1]+7, waypoint_1, 7): #check step
 						self.waypoint_queue.append((self.keypoints[0], i))
 				else:
-					for i in range(self.keypoints[1], waypoint_1, -7):
+					for i in range(self.keypoints[1]-7, waypoint_1, -7):
 						self.waypoint_queue.append((self.keypoints[0], i))
 				self.waypoint_queue.append((self.keypoints[0], waypoint_1))
 				self.keypoints[1] = waypoint_1
@@ -285,10 +286,10 @@ class Edrone():
 				print(f'{waypoint_0},{self.keypoints[1]} is new corner point')
 				print(f'{self.counter} is current counter pnt')
 				if waypoint_0>self.keypoints[0]:
-					for i in range(self.keypoints[0], waypoint_0, 7):
+					for i in range(self.keypoints[0]+7, waypoint_0, 7):
 						self.waypoint_queue.append((i, self.keypoints[1]))
 				else:
-					for i in range(self.keypoints[0], waypoint_0, -7):
+					for i in range(self.keypoints[0]-7, waypoint_0, -7):
 						self.waypoint_queue.append((i, self.keypoints[1]))
 				self.waypoint_queue.append((waypoint_0, self.keypoints[1]))
 				self.keypoints[0] = waypoint_0
@@ -305,7 +306,7 @@ class Edrone():
 		error[1] = self.drone_position[1] - self.waypoint[1]
 		error[2] = self.drone_position[2] - self.waypoint[2]
 		
-		if (error[0]>-0.15 and error[0]<0.15) and (error[1]>-0.15 and error[1]<0.15) and (error[2]>-0.15 and error[2]<0.15):
+		if (error[0]>-0.2 and error[0]<0.2) and (error[1]>-0.2 and error[1]<0.2) and (error[2]>-0.2 and error[2]<0.2):
 			print(self.counter, self.waypoint, self.flag)
 			if  self.flag:
 				self.findWaypoint(7)
