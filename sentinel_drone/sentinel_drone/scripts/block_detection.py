@@ -16,16 +16,16 @@ from osgeo import gdal
 from sentinel_drone.msg import Geolocation
 import subprocess
 
-task2D_img_path = "/home/atharva/Documents/task2d.tif"
-saved_imgs_path = "/home/atharva/Documents/test2"
-csv_path = "/home/atharva/Documents/yellow_box.csv"
+task2D_img_path = "/home/sid/Downloads/task2d.tif"
+saved_imgs_path = "/home/sid/catkin_ws/src/sentinel_drone/Images"
+csv_path = "/home/sid/catkin_ws/src/sentinel_drone/yellow_box.csv"
 
 f  = open(csv_path, "w") #PATH
 
 class Edrone():
 	def __init__(self, f):
 		
-		rospy.init_node('drone_control')	# initializing ros node with name drone_control
+		rospy.init_node('drone_control',disable_signals=True)	# initializing ros node with name drone_control
 
 		# [x,y,z]
 		self.drone_position = [0.0,0.0,0.0]	
@@ -371,5 +371,7 @@ if __name__ == '__main__':
 	time.sleep(6)
 	while not rospy.is_shutdown():
 		e_drone.pid()
+		if e_drone.img_counter==2:
+			rospy.signal_shutdown("reason")
 		r.sleep()
 	f.close()
