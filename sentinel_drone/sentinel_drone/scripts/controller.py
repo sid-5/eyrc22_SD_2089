@@ -19,7 +19,7 @@ from sentinel_drone_driver.msg import PIDError, RCMessage
 from sentinel_drone_driver.srv import CommandBool, CommandBoolResponse
 
 
-MIN_THROTTLE = 1250             # Minimum throttle value, so that the drone does not hit the ground 
+MIN_THROTTLE = 1200             # Minimum throttle value, so that the drone does not hit the ground 
 MIN_ROLL = 0
 MIN_PITCH = 0
 BASE_THROTTLE = 0               # Base value of throttle for hovering. NOTE: Unlike simulator, the drone does not hover at 1500 value (HINT: Hovering value in hardware will range somewhere between 1280 and 1350). Also, the hovering thrust changes with battery % . Hence this will varry with time and the correct value will have to be generated using integral term to remove steady state error 
@@ -27,7 +27,7 @@ MAX_THROTTLE = 1400             # Maximum throttle value, so that the drone does
 MAX_ROLL = 1000
 MAX_PITCH = 1000
 SUM_ERROR_THROTTLE_LIMIT = 0    # Integral anti windup sum value. Decide this value by calcuating carefully
-
+filter_val =0.05
 
 # Similarly, create upper and lower limits, base value, and max sum error values for roll and pitch
 
@@ -41,18 +41,21 @@ class DroneController:
 
         self.rc_message = RCMessage()
         self.drone_whycon_pose_array = PoseArray()
-        self.last_whycon_pose_received_at = None
+        self.last_whycon_pose_received_at = 0
         self.is_flying = False
         # [x,y,z]
         self.drone_position = [0.0,0.0,0.0] 
-        self.setpoint = [0, 0, 22]         # Setpoints for x, y, z respectively      
+        self.setpoint = [0,0, 14]         # Setpoints for x, y, z respectively      
         self.error      = [0, 0, 0]         # Error for roll, pitch and throttle
-        self.Kp = [40.6,40.6,49.5]
-        self.Ki = [0,0,0.0] #197
-        self.Kd = [1200,1200,450] #1223
+        # self.Kp = [40.6,40.6,49.5]
+        # self.Ki = [0,0,0.0] #197
+        # self.Kd = [1200,1200,450] #1223
+        self.Kp = [0,0,0]
+        self.Ki = [0,0,0.8] #197
+        self.Kd = [0,0,0] #1223
         self.prev_values = [0,0,0]
-        self.min_values = [1000,1000,1250]
-        self.max_values = [2000,2000,2000]
+        self.min_values = [1000,1000,1200]
+        self.max_values = [2000,2000,1400]
         self.sample_freq = 28                    #control loop frequency of 28hz
         self.prevI = [0,0,0]                     #roll,pitch,throttle
 
@@ -88,15 +91,21 @@ class DroneController:
     def whycon_poses_callback(self, msg):
         self.last_whycon_pose_received_at = rospy.get_rostime().secs
         self.drone_whycon_pose_array = msg
-        self.drone_position[0] = msg.poses[0].position.x
-        self.drone_position[1] = msg.poses[0].position.y
-        self.drone_position[2] = msg.poses[0].position.z
+        inp = [msg.poses[0].position.x,msg.poses[0].position.y,msg.poses[0].position.z]
+        self.drone_position[0] = inp[0]*filter_val + (1-filter_val)*self.drone_position[0]
+        self.drone_position[1] = inp[1]*filter_val + (1-filter_val)*self.drone_position[1]
+        self.drone_position[2] = inp[2]*filter_val + (1-filter_val)*self.drone_position[2]
+
+        
+        # self.drone_position[0] = msg.poses[0].position.x
+        # self.drone_position[1] = msg.poses[0].position.y
+        # self.drone_position[2] = msg.poses[0].position.z
 
 
     # Callback functions for PID Tuning package
     def altitude_set_pid(self,alt):
         pass
-        self.Kp[2] = alt.Kp * 0.06 
+        self.Kp[2] = alt.Kp * 0.05
         self.Ki[2] = alt.Ki * 0.008
         self.Kd[2] = alt.Kd * 0.3
 
@@ -118,13 +127,13 @@ class DroneController:
 
         #calculating error
         error = [0,0,0]
-        error[0] = self.drone_whycon_pose_array.poses[0].position.x  - self.setpoint[0]
-        error[1] = self.drone_whycon_pose_array.poses[1].position.x  - self.setpoint[1]
-        error[2] = self.drone_whycon_pose_array.poses[2].position.x  - self.setpoint[2]
-
+        error[0] = self.drone_position[0]  - self.setpoint[0]
+        error[1] = self.drone_position[1] - self.setpoint[1]
+        error[2] = self.drone_position[2] - self.setpoint[2]
+        print("pitch",error[1])
         #using clipping technique to control integral part of throttle as roll and pitch have no integral part
         I_throttle = (self.prevI[2] + error[2]) * self.Ki[2]
-        if (error[2]>0 and I_throttle<0) or (error[2]<0 and I_throttle>0) or I_throttle<-50 or I_throttle>0 or error[2]<-1 or error[2]>1:
+        if (error[2]>0 and I_throttle<0) or (error[2]<0 and I_throttle>0) or I_throttle<-30 or I_throttle>30 or error[2]<-3 or error[2]>3:
             I_throttle = 0; 
         I_roll = (self.prevI[0] + error[0]) * self.Ki[0]
         I_pitch = (self.prevI[1] + error[1]) * self.Ki[1]
@@ -135,7 +144,7 @@ class DroneController:
         out_pitch = (self.Kp[1]*error[1]) + (self.Kd[1]*(error[1]-self.prev_values[1])) + I_pitch
 
         #setting commands for drone from PID values
-        self.rc_message.rc_throttle = 1500 + int(out_throttle)
+        self.rc_message.rc_throttle = 1100 + int(out_throttle)
         self.rc_message.rc_roll = 1500 - int(out_roll)
         self.rc_message.rc_pitch = 1500 + int(out_pitch)
 
@@ -147,6 +156,7 @@ class DroneController:
         
 
         #clipping output for drone requirements
+        print(self.Kp[2])
         print("integral",I_throttle)
         print("error", error[2])
         print("out",self.rc_message.rc_throttle)
@@ -166,7 +176,6 @@ class DroneController:
         
         # Send constant 1500 to rc_message.rc_yaw
         self.rc_message.rc_yaw = np.uint16(1500)
-
         self.publish_data_to_rpi(self.rc_message.rc_roll, self.rc_message.rc_pitch, self.rc_message.rc_throttle)
         
         # Publish error messages for plotjuggler debugging 
@@ -174,8 +183,8 @@ class DroneController:
         self.pid_error_pub.publish(
             PIDError(
                 roll_error=self.error[0],
-                pitch_error=self.error[1],
-                throttle_error=self.error[2],
+                pitch_error=0,#pitch_error=self.error[1],
+                throttle_error=0,#throttle_error=self.error[2],
                 yaw_error=0,
                 zero_error=0,
             )
@@ -190,7 +199,7 @@ class DroneController:
         self.rc_message.rc_roll = np.uint16(roll)
         self.rc_message.rc_pitch = np.uint16(pitch)
         self.rc_message.rc_yaw = np.uint16(1500)
-
+        self.rc_pub.publish(self.rc_message)
 
         # NOTE: There is noise in the WhyCon feedback and the noise gets amplified because of derivative term, this noise is multiplied by high Kd gain values and create spikes in the output. 
         #       Sending data with spikes to the drone makes the motors hot and drone vibrates a lot. To reduce the spikes in output, it is advised to pass the output generated from PID through a low pass filter.
@@ -225,7 +234,7 @@ class DroneController:
         # Check the bounds of self.rc_message.rc_throttle, self.rc_message.rc_roll and self.rc_message.rc_pitch aftre rfiltering 
         # Similarly add bounds for pitch yaw and throttle 
 
-        self.rc_pub.publish(self.rc_message)
+        
 
     # This function will be called as soon as this rosnode is terminated. So we disarm the drone as soon as we press CTRL + C. 
     # If anything goes wrong with the drone, immediately press CTRL + C so that the drone disamrs and motors stop 
@@ -268,13 +277,15 @@ if __name__ == "__main__":
     rospy.sleep(1)
 
     rospy.loginfo("Entering PID controller loop")
+    r = rospy.Rate(28)
     while not rospy.is_shutdown():
 
         controller.pid()
 
         if rospy.get_rostime().secs - controller.last_whycon_pose_received_at > 1:
             rospy.logerr("Unable to detect WHYCON poses")
-
+            controller.disarm()
+        r.sleep()
         # Add the sleep time to run the controller loop at desired rate
         #rospy.sleep()
 
